@@ -1,22 +1,35 @@
-from psychopy import parallel, core
+# parport.py
+"""Parallel port interface for EMG/EEG triggers."""
+
 import time
 
+from psychopy import parallel
+
+
 class DummyParPort:
-    def __init__(self, *args, **kwargs):
-        pass 
+    """No-op parallel port for testing without hardware."""
 
-    def send_trigger(self, code, duration=0.0001):
-        pass 
-
-    def reset(self):
+    def send_trigger(self, code: int, duration: float = 0.0005) -> None:
         pass
 
-# --- CLASSE PRINCIPALE (CONNEXION PHYSIQUE) ---
+    def reset(self) -> None:
+        pass
+
+
 class ParPort:
-    def __init__(self, address=0x378):
-        """
-        Initialise le port parallèle.
-        """
+    """
+    Parallel port trigger interface.
+
+    Sends TTL pulses with sub-ms precision using busy-wait.
+    Falls back to dummy mode silently if hardware is unavailable.
+
+    Parameters
+    ----------
+    address : int
+        Port address (default 0x378 for LPT1).
+    """
+
+    def __init__(self, address: int = 0x378) -> None:
         self.address = address
         self.port = None
         self.dummy_mode = False
@@ -25,37 +38,34 @@ class ParPort:
             parallel.setPortAddress(address)
             self.port = parallel.ParallelPort(address)
             self.port.setData(0)
-        except Exception as e:
+        except Exception:
             self.dummy_mode = True
 
-    import time
-
-    def send_trigger(self, code, duration=0.0005):
+    def send_trigger(self, code: int, duration: float = 0.005) -> None:
         """
-        Envoie un trigger sur le port parallèle avec une durée sub-ms.
-        duration : durée du pulse en secondes (ex: 0.0005 = 0.5 ms)
-        """
+        Send a TTL pulse on the parallel port.
 
+        Parameters
+        ----------
+        code : int
+            Trigger value (1–255).
+        duration : float
+            Pulse width in seconds (default 0.5 ms).
+            Uses busy-wait for sub-ms precision.
+        """
         if self.dummy_mode:
             return
 
         try:
             start = time.perf_counter()
-
-            # front montant
             self.port.setData(int(code))
-
-            # busy wait haute précision
             while (time.perf_counter() - start) < duration:
                 pass
-
-            # remise à 0
             self.port.setData(0)
-
         except Exception as e:
-            print(f"Erreur envoi trigger {code}: {e}")
+            print(f"Trigger error (code={code}): {e}")
 
-    def reset(self):
-        """Force la remise à zéro des pins"""
+    def reset(self) -> None:
+        """Force all pins to zero."""
         if not self.dummy_mode and self.port:
             self.port.setData(0)
